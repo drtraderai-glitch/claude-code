@@ -1,0 +1,45 @@
+{
+  "name": "ccttb-trading-bot",
+  "version": "1.0.0",
+  "description": "Comprehensive Crypto Trading Bot with AI Agent capabilities and n8n workflow integration",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test tests/**/*.test.js",
+    "n8n-server": "node src/integrations/n8n-server.js",
+    "ai-agent": "node src/ai-agent/agent.js",
+    "backtest": "node src/utils/backtesting.js"
+  },
+  "keywords": [
+    "trading",
+    "bot",
+    "crypto",
+    "cryptocurrency",
+    "n8n",
+    "ai",
+    "automation",
+    "trading-bot",
+    "algorithmic-trading"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "ccxt": "^4.2.0",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "ws": "^8.16.0",
+    "node-cron": "^3.0.3",
+    "technicalindicators": "^3.1.0",
+    "@anthropic-ai/sdk": "^0.20.0",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

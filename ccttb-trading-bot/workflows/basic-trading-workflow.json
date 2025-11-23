@@ -1,0 +1,203 @@
+{
+  "name": "CCTTB Trading Bot - Basic Workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "id": "schedule-1",
+      "webhookId": "",
+      "credentials": {},
+      "settings": {
+        "schedule": "0 * * * *"
+      }
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/status",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "Get Bot Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [460, 300],
+      "id": "http-1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"isRunning\"]}}",
+              "value2": "true"
+            }
+          ]
+        }
+      },
+      "name": "Check If Running",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "id": "if-1"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/portfolio",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "Get Portfolio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 200],
+      "id": "http-2"
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/positions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "Get Positions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [900, 400],
+      "id": "http-3"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process portfolio and positions data\nconst portfolio = $input.first().json;\nconst positions = $input.all()[1].json;\n\nreturn {\n  json: {\n    timestamp: new Date().toISOString(),\n    portfolio: portfolio,\n    positions: positions,\n    totalEquity: portfolio.balance?.total?.USDT || 0,\n    performance: portfolio.performance\n  }\n};"
+      },
+      "name": "Process Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300],
+      "id": "code-1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json[\"performance\"][\"winRate\"]}}",
+              "operation": "smaller",
+              "value2": 40
+            }
+          ]
+        }
+      },
+      "name": "Check Performance",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1340, 300],
+      "id": "if-2"
+    },
+    {
+      "parameters": {
+        "message": "⚠️ Trading bot performance alert!\n\nWin Rate: {{$json[\"performance\"][\"winRate\"]}}%\nNet Profit: ${{$json[\"performance\"][\"netProfit\"]}}\n\nConsider reviewing strategy or stopping the bot."
+      },
+      "name": "Send Alert",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 1,
+      "position": [1560, 200],
+      "id": "discord-1"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Bot Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Bot Status": {
+      "main": [
+        [
+          {
+            "node": "Check If Running",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Running": {
+      "main": [
+        [
+          {
+            "node": "Get Portfolio",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Positions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Portfolio": {
+      "main": [
+        [
+          {
+            "node": "Process Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Positions": {
+      "main": [
+        [
+          {
+            "node": "Process Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Data": {
+      "main": [
+        [
+          {
+            "node": "Check Performance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Performance": {
+      "main": [
+        [
+          {
+            "node": "Send Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "tags": [],
+  "pinData": {},
+  "meta": {
+    "instanceId": "ccttb-trading-bot"
+  }
+}
