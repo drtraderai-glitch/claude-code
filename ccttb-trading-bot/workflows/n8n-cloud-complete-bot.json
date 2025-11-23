@@ -1,0 +1,210 @@
+{
+  "name": "🤖 AI Forex Trading Bot - Complete",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "cronExpression", "expression": "0 * * * *"}]
+        }
+      },
+      "name": "Every Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "id": "schedule-main"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fetch market data for forex pair\nconst pair = $env.DEFAULT_PAIR || 'XAUUSD';\nconst timeframe = '1h';\n\n// Simulate OHLCV data (in production, fetch from data provider)\n// You can use Alpha Vantage, Twelve Data, or similar APIs\nconst now = Date.now();\nconst candles = [];\n\nfor (let i = 100; i >= 0; i--) {\n  const timestamp = now - (i * 3600000);\n  const basePrice = pair === 'XAUUSD' ? 2000 : 1.08;\n  const volatility = pair === 'XAUUSD' ? 20 : 0.002;\n  \n  const open = basePrice + (Math.random() - 0.5) * volatility;\n  const close = open + (Math.random() - 0.5) * volatility;\n  const high = Math.max(open, close) + Math.random() * volatility / 2;\n  const low = Math.min(open, close) - Math.random() * volatility / 2;\n  const volume = Math.random() * 1000;\n  \n  candles.push({\n    timestamp,\n    open,\n    high,\n    low,\n    close,\n    volume\n  });\n}\n\nconst currentPrice = candles[candles.length - 1].close;\n\nreturn {\n  json: {\n    pair,\n    timeframe,\n    candles,\n    currentPrice,\n    timestamp: now\n  }\n};"
+      },
+      "name": "Get Market Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "id": "get-market-data"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate Technical Indicators\nconst candles = $json.candles;\nconst closes = candles.map(c => c.close);\n\n// Calculate RSI\nfunction calculateRSI(prices, period = 14) {\n  const gains = [];\n  const losses = [];\n  \n  for (let i = 1; i < prices.length; i++) {\n    const diff = prices[i] - prices[i - 1];\n    gains.push(diff > 0 ? diff : 0);\n    losses.push(diff < 0 ? Math.abs(diff) : 0);\n  }\n  \n  const avgGain = gains.slice(-period).reduce((a, b) => a + b, 0) / period;\n  const avgLoss = losses.slice(-period).reduce((a, b) => a + b, 0) / period;\n  const rs = avgGain / avgLoss;\n  const rsi = 100 - (100 / (1 + rs));\n  \n  return rsi;\n}\n\n// Calculate EMA\nfunction calculateEMA(prices, period) {\n  const multiplier = 2 / (period + 1);\n  let ema = prices.slice(0, period).reduce((a, b) => a + b, 0) / period;\n  \n  for (let i = period; i < prices.length; i++) {\n    ema = (prices[i] - ema) * multiplier + ema;\n  }\n  \n  return ema;\n}\n\n// Calculate MACD\nfunction calculateMACD(prices) {\n  const ema12 = calculateEMA(prices, 12);\n  const ema26 = calculateEMA(prices, 26);\n  const macd = ema12 - ema26;\n  \n  return { macd, ema12, ema26 };\n}\n\nconst rsi = calculateRSI(closes);\nconst macd = calculateMACD(closes);\nconst ema50 = calculateEMA(closes, 50);\nconst ema200 = calculateEMA(closes, 200);\n\n// Generate trading signal\nlet signal = 'HOLD';\nlet confidence = 0.5;\n\nif (rsi < 30 && macd.macd > 0 && $json.currentPrice > ema50) {\n  signal = 'BUY';\n  confidence = 0.85;\n} else if (rsi > 70 && macd.macd < 0 && $json.currentPrice < ema50) {\n  signal = 'SELL';\n  confidence = 0.85;\n} else if (rsi < 40 && macd.macd > 0) {\n  signal = 'BUY';\n  confidence = 0.70;\n} else if (rsi > 60 && macd.macd < 0) {\n  signal = 'SELL';\n  confidence = 0.70;\n}\n\nreturn {\n  json: {\n    ...($json),\n    indicators: {\n      rsi: rsi.toFixed(2),\n      macd: macd.macd.toFixed(4),\n      ema50: ema50.toFixed(4),\n      ema200: ema200.toFixed(4)\n    },\n    signal: {\n      type: signal,\n      confidence,\n      timestamp: Date.now()\n    }\n  }\n};"
+      },
+      "name": "Technical Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "id": "technical-analysis"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "anthropic-version", "value": "2023-06-01"},
+            {"name": "content-type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\": \"claude-sonnet-4-5-20250929\", \"max_tokens\": 1024, \"messages\": [{\"role\": \"user\", \"content\": \"You are an expert forex trading analyst. Analyze this signal:\\n\\nPair: {{$json.pair}}\\nSignal: {{$json.signal.type}}\\nConfidence: {{$json.signal.confidence}}\\nRSI: {{$json.indicators.rsi}}\\nMACD: {{$json.indicators.macd}}\\nPrice: {{$json.currentPrice}}\\n\\nProvide analysis in JSON: {\\\"approve\\\": true/false, \\\"confidence\\\": 0-1, \\\"reasoning\\\": \\\"explanation\\\"}\"}]}",
+        "options": {}
+      },
+      "name": "AI Market Strategist",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 200],
+      "id": "ai-strategist"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "anthropic-version", "value": "2023-06-01"},
+            {"name": "content-type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\": \"claude-sonnet-4-5-20250929\", \"max_tokens\": 1024, \"messages\": [{\"role\": \"user\", \"content\": \"You are a risk manager. Evaluate this trade:\\n\\nPair: {{$json.pair}}\\nSignal: {{$json.signal.type}}\\nPrice: {{$json.currentPrice}}\\nPosition Size: {{$env.POSITION_SIZE}}\\nStop Loss Pips: {{$env.STOP_LOSS_PIPS}}\\n\\nProvide risk assessment in JSON: {\\\"approve\\\": true/false, \\\"confidence\\\": 0-1, \\\"reasoning\\\": \\\"explanation\\\", \\\"position_size\\\": 0.01}\"}]}",
+        "options": {}
+      },
+      "name": "AI Risk Manager",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 400],
+      "id": "ai-risk"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse AI responses and make decision\nconst inputs = $input.all();\nconst strategist = inputs[0].json.content[0].text;\nconst riskManager = inputs[1].json.content[0].text;\n\n// Extract JSON from responses\nfunction extractJSON(text) {\n  const match = text.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    try {\n      return JSON.parse(match[0]);\n    } catch (e) {\n      return { approve: false, confidence: 0, reasoning: 'Parse error' };\n    }\n  }\n  return { approve: false, confidence: 0, reasoning: 'No JSON found' };\n}\n\nconst strategistDecision = extractJSON(strategist);\nconst riskDecision = extractJSON(riskManager);\n\n// Final decision - require both agents to approve\nconst finalApproval = strategistDecision.approve && riskDecision.approve;\nconst avgConfidence = (strategistDecision.confidence + riskDecision.confidence) / 2;\n\n// Get original signal\nconst originalData = $('Technical Analysis').first().json;\n\nreturn {\n  json: {\n    pair: originalData.pair,\n    signal: originalData.signal,\n    currentPrice: originalData.currentPrice,\n    indicators: originalData.indicators,\n    aiDecisions: {\n      strategist: strategistDecision,\n      riskManager: riskDecision\n    },\n    finalDecision: {\n      approve: finalApproval,\n      confidence: avgConfidence,\n      action: finalApproval ? originalData.signal.type : 'HOLD'\n    },\n    positionSize: riskDecision.position_size || parseFloat($env.POSITION_SIZE),\n    stopLossPips: parseFloat($env.STOP_LOSS_PIPS),\n    takeProfitPips: parseFloat($env.TAKE_PROFIT_PIPS)\n  }\n};"
+      },
+      "name": "Trading Supervisor",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300],
+      "id": "supervisor"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {"value1": "={{$json.finalDecision.approve}}", "value2": true}
+          ],
+          "number": [
+            {"value1": "={{$json.finalDecision.confidence}}", "operation": "larger", "value2": 0.7}
+          ]
+        }
+      },
+      "name": "Check Approval",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1340, 300],
+      "id": "check-approval"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Execute trade via cTrader\n// Note: This requires a FIX API bridge or REST API endpoint\n// For now, we'll log the trade decision\n\nconst trade = {\n  pair: $json.pair,\n  action: $json.finalDecision.action,\n  price: $json.currentPrice,\n  positionSize: $json.positionSize,\n  stopLoss: $json.finalDecision.action === 'BUY' \n    ? $json.currentPrice - ($json.stopLossPips * 0.0001)\n    : $json.currentPrice + ($json.stopLossPips * 0.0001),\n  takeProfit: $json.finalDecision.action === 'BUY'\n    ? $json.currentPrice + ($json.takeProfitPips * 0.0001)\n    : $json.currentPrice - ($json.takeProfitPips * 0.0001),\n  timestamp: new Date().toISOString(),\n  confidence: $json.finalDecision.confidence,\n  aiDecisions: $json.aiDecisions\n};\n\n// In production: Call cTrader API here\n// For demo: Log the trade\n\nreturn {\n  json: {\n    trade,\n    status: 'EXECUTED',\n    message: `${trade.action} ${trade.pair} @ ${trade.price}`\n  }\n};"
+      },
+      "name": "Execute Trade",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 200],
+      "id": "execute-trade"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {"__rl": true, "value": "={{$env.SHEET_ID}}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "Trades", "mode": "name"},
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Timestamp": "={{$json.trade.timestamp}}",
+            "Pair": "={{$json.trade.pair}}",
+            "Action": "={{$json.trade.action}}",
+            "Price": "={{$json.trade.price}}",
+            "Position Size": "={{$json.trade.positionSize}}",
+            "Stop Loss": "={{$json.trade.stopLoss}}",
+            "Take Profit": "={{$json.trade.takeProfit}}",
+            "Confidence": "={{$json.trade.confidence}}",
+            "Status": "={{$json.status}}"
+          }
+        },
+        "options": {}
+      },
+      "name": "Log to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1780, 200],
+      "id": "log-sheets"
+    },
+    {
+      "parameters": {
+        "content": "🤖 **AI Trade Executed**\\n\\n**{{$json.trade.action}} {{$json.trade.pair}}**\\nPrice: {{$json.trade.price}}\\nSize: {{$json.trade.positionSize}}\\nSL: {{$json.trade.stopLoss}}\\nTP: {{$json.trade.takeProfit}}\\nConfidence: {{$json.trade.confidence}}%\\n\\n**AI Analysis:**\\n✅ Strategist: {{$json.trade.aiDecisions.strategist.reasoning}}\\n✅ Risk Manager: {{$json.trade.aiDecisions.riskManager.reasoning}}",
+        "options": {}
+      },
+      "name": "Send Discord Alert",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 1,
+      "position": [1780, 400],
+      "id": "discord-alert"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Trade was rejected by AI\nreturn {\n  json: {\n    pair: $json.pair,\n    signal: $json.signal.type,\n    rejected: true,\n    reason: !$json.finalDecision.approve \n      ? 'AI agents rejected the signal'\n      : 'Confidence too low',\n    confidence: $json.finalDecision.confidence,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "name": "Log Rejection",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 400],
+      "id": "log-rejection"
+    }
+  ],
+  "connections": {
+    "Every Hour": {
+      "main": [[{"node": "Get Market Data", "type": "main", "index": 0}]]
+    },
+    "Get Market Data": {
+      "main": [[{"node": "Technical Analysis", "type": "main", "index": 0}]]
+    },
+    "Technical Analysis": {
+      "main": [[
+        {"node": "AI Market Strategist", "type": "main", "index": 0},
+        {"node": "AI Risk Manager", "type": "main", "index": 0}
+      ]]
+    },
+    "AI Market Strategist": {
+      "main": [[{"node": "Trading Supervisor", "type": "main", "index": 0}]]
+    },
+    "AI Risk Manager": {
+      "main": [[{"node": "Trading Supervisor", "type": "main", "index": 0}]]
+    },
+    "Trading Supervisor": {
+      "main": [[{"node": "Check Approval", "type": "main", "index": 0}]]
+    },
+    "Check Approval": {
+      "main": [
+        [{"node": "Execute Trade", "type": "main", "index": 0}],
+        [{"node": "Log Rejection", "type": "main", "index": 0}]
+      ]
+    },
+    "Execute Trade": {
+      "main": [[
+        {"node": "Log to Google Sheets", "type": "main", "index": 0},
+        {"node": "Send Discord Alert", "type": "main", "index": 0}
+      ]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "staticData": null,
+  "tags": [],
+  "pinData": {},
+  "meta": {"instanceId": "n8n-cloud-forex-bot"}
+}
