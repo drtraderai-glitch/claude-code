@@ -10,7 +10,9 @@
     "test": "node --test tests/**/*.test.js",
     "n8n-server": "node src/integrations/n8n-server.js",
     "ai-agent": "node src/ai-agent/agent.js",
-    "backtest": "node src/utils/backtesting.js"
+    "backtest": "node src/utils/backtesting.js",
+    "dashboard": "node src/visualization/dashboard-server.js",
+    "multi-agent": "node src/ai-agent/multi-agent-orchestrator.js"
   },
   "keywords": [
     "trading",

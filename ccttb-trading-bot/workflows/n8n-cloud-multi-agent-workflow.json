@@ -1,0 +1,192 @@
+{
+  "name": "CCTTB Multi-Agent AI Trading - n8n.io Cloud",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/15 * * * *"
+            }
+          ]
+        }
+      },
+      "name": "Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "id": "schedule-1"
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BOT_URL}}/api/dashboard/data",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "Get Bot Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [470, 300],
+      "id": "http-1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract and analyze bot performance\nconst data = $input.first().json;\n\nconst performance = data.performance || {};\nconst positions = data.positions || [];\nconst aiDecisions = data.aiDecisions || [];\n\n// Calculate key metrics\nconst openPositionsCount = positions.length;\nconst winRate = performance.winRate || 0;\nconst netProfit = performance.netProfit || 0;\nconst totalTrades = performance.totalTrades || 0;\n\n// Latest AI decision\nconst latestDecision = aiDecisions[0];\n\n// Determine status\nlet status = 'HEALTHY';\nif (winRate < 40) status = 'WARNING';\nif (netProfit < -100) status = 'CRITICAL';\n\nreturn {\n  json: {\n    timestamp: new Date().toISOString(),\n    status,\n    metrics: {\n      winRate,\n      netProfit,\n      totalTrades,\n      openPositions: openPositionsCount\n    },\n    latestDecision: latestDecision ? {\n      agent: latestDecision.agent,\n      decision: latestDecision.decision,\n      confidence: latestDecision.confidence,\n      reasoning: latestDecision.reasoning\n    } : null,\n    positions: positions.map(([pair, pos]) => ({\n      pair,\n      side: pos.side,\n      entryPrice: pos.entryPrice,\n      pnl: ((pos.currentPrice - pos.entryPrice) / pos.entryPrice * 100).toFixed(2)\n    }))\n  }\n};"
+      },
+      "name": "Analyze Performance",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [690, 300],
+      "id": "code-1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.status}}",
+              "operation": "equals",
+              "value2": "CRITICAL"
+            }
+          ]
+        }
+      },
+      "name": "Check Status",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [910, 300],
+      "id": "if-1"
+    },
+    {
+      "parameters": {
+        "content": "🚨 **CRITICAL ALERT**\\n\\nTrading Bot Status: CRITICAL\\n\\nMetrics:\\n- Net Profit: ${{$json.metrics.netProfit}}\\n- Win Rate: {{$json.metrics.winRate}}%\\n- Total Trades: {{$json.metrics.totalTrades}}\\n- Open Positions: {{$json.metrics.openPositions}}\\n\\nAction Required: Review bot settings immediately!",
+        "options": {}
+      },
+      "name": "Send Alert",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 1,
+      "position": [1130, 200],
+      "id": "discord-1"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{$env.SHEET_ID}}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Bot Performance",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Timestamp": "={{$json.timestamp}}",
+            "Status": "={{$json.status}}",
+            "Win Rate": "={{$json.metrics.winRate}}",
+            "Net Profit": "={{$json.metrics.netProfit}}",
+            "Total Trades": "={{$json.metrics.totalTrades}}",
+            "Open Positions": "={{$json.metrics.openPositions}}"
+          }
+        },
+        "options": {}
+      },
+      "name": "Log to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1130, 400],
+      "id": "sheets-1"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-signal",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook - AI Signal",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 600],
+      "webhookId": "ai-trading-signal",
+      "id": "webhook-1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process incoming trading signal from external source (e.g., TradingView)\nconst signal = $input.first().json;\n\n// Validate signal\nif (!signal.type || !signal.pair) {\n  return {\n    json: {\n      error: 'Invalid signal format',\n      required: ['type', 'pair']\n    }\n  };\n}\n\n// Enrich signal with context\nreturn {\n  json: {\n    signal: {\n      type: signal.type,\n      pair: signal.pair,\n      price: signal.price,\n      confidence: signal.confidence || 0.8,\n      source: 'external',\n      timestamp: new Date().toISOString()\n    },\n    indicators: signal.indicators || {},\n    metadata: {\n      receivedAt: new Date().toISOString(),\n      source: signal.source || 'webhook'\n    }\n  }\n};"
+      },
+      "name": "Process Signal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [470, 600],
+      "id": "code-2"
+    },
+    {
+      "parameters": {
+        "url": "={{$env.BOT_URL}}/webhook/signal",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json.signal)}}",
+        "options": {}
+      },
+      "name": "Forward to Bot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [690, 600],
+      "id": "http-2"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify({ success: true, message: 'Signal processed', result: $json })}}",
+        "options": {}
+      },
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [910, 600],
+      "id": "respond-1"
+    }
+  ],
+  "connections": {
+    "Every 15 Minutes": {
+      "main": [[{ "node": "Get Bot Data", "type": "main", "index": 0 }]]
+    },
+    "Get Bot Data": {
+      "main": [[{ "node": "Analyze Performance", "type": "main", "index": 0 }]]
+    },
+    "Analyze Performance": {
+      "main": [[{ "node": "Check Status", "type": "main", "index": 0 }]]
+    },
+    "Check Status": {
+      "main": [
+        [{ "node": "Send Alert", "type": "main", "index": 0 }],
+        [{ "node": "Log to Google Sheets", "type": "main", "index": 0 }]
+      ]
+    },
+    "Webhook - AI Signal": {
+      "main": [[{ "node": "Process Signal", "type": "main", "index": 0 }]]
+    },
+    "Process Signal": {
+      "main": [[{ "node": "Forward to Bot", "type": "main", "index": 0 }]]
+    },
+    "Forward to Bot": {
+      "main": [[{ "node": "Respond Success", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 2,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

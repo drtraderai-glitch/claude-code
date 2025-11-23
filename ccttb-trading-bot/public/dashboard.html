@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CCTTB Trading Bot - Live Dashboard</title>
+    <link rel="stylesheet" href="/css/dashboard.css">
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <header class="dashboard-header">
+            <div class="logo">
+                <h1>🤖 CCTTB Trading Bot</h1>
+                <span class="tagline">AI-Powered Multi-Agent Trading System</span>
+            </div>
+            <div class="header-status">
+                <div class="status-indicator" id="botStatus">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Connecting...</span>
+                </div>
+                <div class="connection-status" id="wsStatus">
+                    <span class="ws-dot"></span>
+                    <span class="ws-text">WebSocket</span>
+                </div>
+            </div>
+            <div class="header-controls">
+                <button id="pauseBtn" class="btn btn-warning">Pause</button>
+                <button id="resumeBtn" class="btn btn-success" style="display: none;">Resume</button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="dashboard-content">
+            <!-- Left Sidebar - Stats & Info -->
+            <aside class="sidebar-left">
+                <div class="widget performance-widget">
+                    <h3>📊 Performance</h3>
+                    <div class="stat-grid">
+                        <div class="stat-item">
+                            <span class="stat-label">Total P&L</span>
+                            <span class="stat-value" id="totalPnl">$0.00</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Win Rate</span>
+                            <span class="stat-value" id="winRate">0%</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Total Trades</span>
+                            <span class="stat-value" id="totalTrades">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Open Positions</span>
+                            <span class="stat-value" id="openPositions">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="widget positions-widget">
+                    <h3>📍 Open Positions</h3>
+                    <div id="positionsList" class="positions-list">
+                        <p class="no-data">No open positions</p>
+                    </div>
+                </div>
+
+                <div class="widget ai-agents-widget">
+                    <h3>🤖 AI Agents Status</h3>
+                    <div id="agentsList" class="agents-list">
+                        <div class="agent-item">
+                            <span class="agent-name">Market Strategist</span>
+                            <span class="agent-status active">Active</span>
+                        </div>
+                        <div class="agent-item">
+                            <span class="agent-name">Risk Manager</span>
+                            <span class="agent-status active">Active</span>
+                        </div>
+                        <div class="agent-item">
+                            <span class="agent-name">Technical Analyst</span>
+                            <span class="agent-status active">Active</span>
+                        </div>
+                        <div class="agent-item">
+                            <span class="agent-name">Sentiment Analyst</span>
+                            <span class="agent-status active">Active</span>
+                        </div>
+                        <div class="agent-item">
+                            <span class="agent-name">Portfolio Manager</span>
+                            <span class="agent-status active">Active</span>
+                        </div>
+                        <div class="agent-item">
+                            <span class="agent-name">Execution Manager</span>
+                            <span class="agent-status active">Active</span>
+                        </div>
+                        <div class="agent-item">
+                            <span class="agent-name">Trading Supervisor</span>
+                            <span class="agent-status active">Active</span>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Center - Chart Area -->
+            <main class="main-content">
+                <div class="chart-container">
+                    <div class="chart-header">
+                        <div class="chart-controls">
+                            <select id="pairSelect" class="control-select">
+                                <option value="EURUSD">EURUSD</option>
+                                <option value="GBPUSD">GBPUSD</option>
+                                <option value="USDJPY">USDJPY</option>
+                                <option value="XAUUSD">XAUUSD</option>
+                                <option value="BTC/USDT">BTC/USDT</option>
+                                <option value="ETH/USDT">ETH/USDT</option>
+                            </select>
+                            <select id="timeframeSelect" class="control-select">
+                                <option value="1m">1m</option>
+                                <option value="5m">5m</option>
+                                <option value="15m">15m</option>
+                                <option value="1h" selected>1h</option>
+                                <option value="4h">4h</option>
+                                <option value="1d">1d</option>
+                            </select>
+                        </div>
+                        <div class="chart-info" id="chartInfo">
+                            <span class="current-price">Loading...</span>
+                        </div>
+                    </div>
+                    <div id="tradingChart" class="chart"></div>
+
+                    <div class="indicators-panel">
+                        <h4>📈 Indicators</h4>
+                        <div id="indicatorsDisplay" class="indicators-grid">
+                            <!-- Indicators will be populated here -->
+                        </div>
+                    </div>
+                </div>
+
+                <div class="signals-container">
+                    <h3>🎯 Recent Signals & Trades</h3>
+                    <div id="signalsList" class="signals-list">
+                        <!-- Signals will be populated here -->
+                    </div>
+                </div>
+            </main>
+
+            <!-- Right Sidebar - AI Decisions & Activity -->
+            <aside class="sidebar-right">
+                <div class="widget ai-decisions-widget">
+                    <h3>🧠 AI Decisions</h3>
+                    <div id="aiDecisionsList" class="ai-decisions-list">
+                        <p class="no-data">Waiting for decisions...</p>
+                    </div>
+                </div>
+
+                <div class="widget activity-widget">
+                    <h3>📋 Activity Log</h3>
+                    <div id="activityLog" class="activity-log">
+                        <p class="log-entry">System initialized</p>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <script src="/js/dashboard.js"></script>
+</body>
+</html>
