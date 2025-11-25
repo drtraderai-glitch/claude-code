@@ -171,10 +171,14 @@ namespace CCTTB
                 var color = s.IsBullish ? _config.BullishColor : _config.BearishColor;
                 string id = C("SWP", $"{s.Time.Ticks}_{i++}");
 
-                _chart.DrawIcon(id, ChartIconType.Circle, s.Time, s.Price, color);
-                Track("SWP", id, CapLiq);
+                // IMPROVED: Determine sweep type for better visualization
+                bool isExternal = false;
+                bool isInternal = false;
+                string sweepType = "Generic";
+                string sweepIcon = "●";  // Default circle
 
                 string txt = s.IsBullish ? "Sell-side sweep" : "Buy-side sweep";
+
                 // Prefer explicit label when present
                 if (!string.IsNullOrWhiteSpace(s.Label))
                 {
@@ -183,25 +187,75 @@ namespace CCTTB
                     bool isEq = L == "EQH" || L == "EQL";
                     bool isWk = L == "PWH" || L == "PWL";
                     bool isCd = L == "CDH" || L == "CDL";
-                    if (isPd || isEq || isWk || isCd)
-                        txt = L + " Sweep";
-                    else if (L.Contains("SWING") && (_config.ShowInternalSweepLabels))
-                        txt = "Internal Sweep";
-                }
-                if (pdh.HasValue && Math.Abs(s.Price - pdh.Value) <= tol) txt = "PDH Sweep";
-                if (pdl.HasValue && Math.Abs(s.Price - pdl.Value) <= tol) txt = "PDL Sweep";
 
-                double y = s.Price + (s.IsBullish ? tol : -tol);
+                    if (isPd || isEq || isWk || isCd)
+                    {
+                        txt = L + " Sweep";
+                        isExternal = true;
+                        sweepType = "External";
+                        sweepIcon = "⬆️"; // External sweep - major level
+                    }
+                    else if (L.Contains("SWING") && (_config.ShowInternalSweepLabels))
+                    {
+                        txt = "Internal Sweep";
+                        isInternal = true;
+                        sweepType = "Internal";
+                        sweepIcon = "↗️"; // Internal sweep - swing level
+                    }
+                }
+
+                // Check proximity to PDH/PDL
+                if (pdh.HasValue && Math.Abs(s.Price - pdh.Value) <= tol)
+                {
+                    txt = "PDH Sweep";
+                    isExternal = true;
+                    sweepType = "External-PDH";
+                    sweepIcon = "⬆️";
+                }
+                if (pdl.HasValue && Math.Abs(s.Price - pdl.Value) <= tol)
+                {
+                    txt = "PDL Sweep";
+                    isExternal = true;
+                    sweepType = "External-PDL";
+                    sweepIcon = "⬆️";
+                }
+
+                // IMPROVED: Different icons for external vs internal sweeps
+                ChartIconType iconType = isExternal ? ChartIconType.UpTriangle :
+                                        isInternal ? ChartIconType.Diamond :
+                                        ChartIconType.Circle;
+
+                // Draw the sweep marker with appropriate icon
+                _chart.DrawIcon(id, iconType, s.Time, s.Price, color);
+                Track("SWP", id, CapLiq);
+
+                // IMPROVED: Enhanced label with sweep type and direction
+                double y = s.Price + (s.IsBullish ? tol * 2 : -tol * 2);
                 Color textColor = color;
+
                 if (_config.ColorizeKeyLevelLabels)
                 {
                     if (txt.StartsWith("PD")) textColor = _config.KeyColorPD;
                     else if (txt.StartsWith("PWH") || txt.StartsWith("PWL")) textColor = _config.KeyColorWK;
                     else if (txt.StartsWith("EQ")) textColor = _config.KeyColorEQ;
                     else if (txt.StartsWith("CD")) textColor = _config.KeyColorCD;
+                    else if (isExternal) textColor = Color.FromArgb(255, 255, 165, 0);  // Orange for external
+                    else if (isInternal) textColor = Color.FromArgb(255, 173, 216, 230); // Light blue for internal
                 }
-                _chart.DrawText(id + "_L", txt, s.Time, y, textColor);
+
+                // IMPROVED: Multi-line label with type and price
+                string enhancedLabel = $"{sweepIcon} {txt}\n{sweepType} | {s.Price:F5}";
+                _chart.DrawText(id + "_L", enhancedLabel, s.Time, y, textColor);
                 Track("SWP", id + "_L", CapLiq);
+
+                // IMPROVED: Draw sweep candle range indicator (high to low of sweep candle)
+                if (isExternal && s.SweepCandleHigh > 0 && s.SweepCandleLow > 0)
+                {
+                    string rangeId = id + "_RANGE";
+                    Color rangeColor = Color.FromArgb(100, color.R, color.G, color.B);  // Semi-transparent
+                    _chart.DrawTrendLine(rangeId, s.Time, s.SweepCandleHigh, s.Time, s.SweepCandleLow, rangeColor, 2, LineStyle.Solid);
+                    Track("SWP", rangeId, CapLiq);
+                }
 
                 if (i >= CapLiq) break;
             }
@@ -570,17 +624,21 @@ namespace CCTTB
                 }
 
                 string id = C("OTE", $"{o.Time.Ticks}_{iBox}");
-                _chart.DrawRectangle(id, o.Time, hi, o.Time.AddMinutes(boxMinutes), lo, c);
+
+                // IMPROVED: Draw semi-transparent filled box with border
+                Color fillColor = Color.FromArgb(30, c.R, c.G, c.B);  // 30% opacity
+                _chart.DrawRectangle(id, o.Time, hi, o.Time.AddMinutes(boxMinutes), lo, fillColor, 2, LineStyle.Solid);
                 Track("OTE", id, CapOte);
 
                 if (drawEq50)
                 {
-                    // OTE mid (mid of 0.618-0.79 band)
+                    // OTE mid (mid of 0.618-0.79 band) - SWEET SPOT
                     double mid = (lo + hi) * 0.5;
-                    _chart.DrawHorizontalLine(id + "_MID", mid, c, 1, LineStyle.Dots);
+                    Color sweetColor = Color.FromArgb(255, 255, 215, 0);  // Bright gold for sweet spot
+                    _chart.DrawHorizontalLine(id + "_MID", mid, sweetColor, 2, LineStyle.Solid);
                     if (ShowLabels)
                     {
-                        _chart.DrawText(id + "_MIDL", "OTE Mid", o.Time, mid, c);
+                        _chart.DrawText(id + "_MIDL", "🎯 SWEET SPOT", o.Time, mid, sweetColor);
                         Track("OTE", id + "_MIDL", CapOte);
                     }
                     Track("OTE", id + "_MID", CapOte);
@@ -592,18 +650,29 @@ namespace CCTTB
                     Track("OTE", id + "_EQ50", CapOte);
                     Track("OTE", id + "_EQ50L", CapOte);
 
-                    // Draw inner fib edges for clarity
+                    // Draw inner fib edges for clarity - IMPROVED WITH LABELS
                     _chart.DrawHorizontalLine(id + "_618", o.OTE618, c, 1, LineStyle.Dots);
                     _chart.DrawHorizontalLine(id + "_786", o.OTE79,  c, 1, LineStyle.Dots);
+
+                    // Add fib level labels
+                    if (ShowLabels)
+                    {
+                        _chart.DrawText(id + "_618L", "61.8%", o.Time, o.OTE618, c);
+                        _chart.DrawText(id + "_786L", "79.0%", o.Time, o.OTE79, c);
+                        Track("OTE", id + "_618L", CapOte);
+                        Track("OTE", id + "_786L", CapOte);
+                    }
                     Track("OTE", id + "_618", CapOte);
                     Track("OTE", id + "_786", CapOte);
                 }
 
-                // Label the zone type
+                // IMPROVED: Label with direction and price range
                 if (ShowLabels)
                 {
-                    string zl = o.Direction == BiasDirection.Bullish ? "OTE Bullish" : "OTE Bearish";
-                    _chart.DrawText(id + "_LBL", zl, o.Time, (lo + hi) * 0.5, c);
+                    string directionIcon = o.Direction == BiasDirection.Bullish ? "📈" : "📉";
+                    string zl = $"{directionIcon} OTE {o.Direction}\n{lo:F5} - {hi:F5}";
+                    Color labelColor = Color.FromArgb(255, c.R, c.G, c.B);  // Full opacity for label
+                    _chart.DrawText(id + "_LBL", zl, o.Time, hi + (_robot.Symbol.PipSize * 2), labelColor);
                     Track("OTE", id + "_LBL", CapOte);
                 }
 
