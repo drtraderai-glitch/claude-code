@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -905,6 +906,158 @@ namespace CCTTB
                 }
             }
             catch { }
+        }
+
+        // ========== ENRICHED LIQUIDITY VISUALIZATION ==========
+
+        /// <summary>
+        /// Draw enriched liquidity zones with quality indicators (color-coded by entry tool count).
+        /// Shows which zones have OTE/OB/FVG/BB nearby.
+        /// </summary>
+        public void DrawEnrichedLiquidity(List<LiquidityZone> zones, double currentPrice, int maxZones = 15)
+        {
+            if (!_config.EnablePOIBoxDraw || zones == null || zones.Count == 0) return;
+
+            int drawn = 0;
+            foreach (var liq in zones.OrderByDescending(z => z.EntryToolCount).ThenByDescending(z => z.Start))
+            {
+                if (drawn >= maxZones) break;
+
+                // Get quality-based colors
+                Color zoneColor = GetLiquidityQualityColor(liq.EntryToolCount, liq.Type);
+                Color labelColor = GetLiquidityQualityLabelColor(liq.EntryToolCount);
+
+                // Draw zone rectangle
+                string boxId = C("LIQBOX", $"{liq.Start.Ticks}_{liq.Id}");
+                try
+                {
+                    _chart.DrawRectangle(boxId, liq.Start, liq.Low, liq.End, liq.High, zoneColor, 1, LineStyle.Solid);
+                    Track("LIQBOX", boxId, maxZones);
+                }
+                catch { }
+
+                // Draw quality label
+                string labelText = BuildEnrichedLiquidityLabel(liq);
+                string labelId = boxId + "_LABEL";
+                try
+                {
+                    double labelY = liq.Type == LiquidityZoneType.Supply ? liq.High : liq.Low;
+                    _chart.DrawText(labelId, labelText, liq.Start, labelY, labelColor);
+                    Track("LIQBOX", labelId, maxZones);
+                }
+                catch { }
+
+                // Draw entry tool markers (small icons)
+                DrawEntryToolMarkers(liq, drawn);
+
+                drawn++;
+            }
+        }
+
+        /// <summary>
+        /// Get color based on quality (entry tool count) and zone type.
+        /// </summary>
+        private Color GetLiquidityQualityColor(int toolCount, LiquidityZoneType zoneType)
+        {
+            // Base color on zone type
+            bool isSupply = (zoneType == LiquidityZoneType.Supply);
+
+            return toolCount switch
+            {
+                4 => Color.FromArgb(50, 255, 215, 0),       // Gold - Premium (50% opacity)
+                3 => isSupply ? Color.FromArgb(50, 255, 69, 0) : Color.FromArgb(50, 50, 205, 50),  // Red/Green - Excellent
+                2 => isSupply ? Color.FromArgb(40, 255, 127, 80) : Color.FromArgb(40, 135, 206, 250), // Coral/LightBlue - Good
+                1 => isSupply ? Color.FromArgb(30, 220, 20, 60) : Color.FromArgb(30, 60, 179, 113),  // Crimson/SeaGreen - Standard
+                _ => Color.FromArgb(20, 150, 150, 150)      // Gray - Basic (20% opacity)
+            };
+        }
+
+        /// <summary>
+        /// Get label color based on quality.
+        /// </summary>
+        private Color GetLiquidityQualityLabelColor(int toolCount)
+        {
+            return toolCount switch
+            {
+                4 => Color.Gold,
+                3 => Color.LimeGreen,
+                2 => Color.DodgerBlue,
+                1 => Color.LightGray,
+                _ => Color.Gray
+            };
+        }
+
+        /// <summary>
+        /// Build enriched label showing quality and entry tools.
+        /// </summary>
+        private string BuildEnrichedLiquidityLabel(LiquidityZone liq)
+        {
+            string label = liq.Label ?? (liq.Type == LiquidityZoneType.Supply ? "Supply" : "Demand");
+            label += $"\n{liq.QualityLabel}";
+
+            if (liq.EntryTools.Count > 0)
+            {
+                label += $"\n{string.Join(" | ", liq.EntryTools)}";
+            }
+
+            return label;
+        }
+
+        /// <summary>
+        /// Draw small markers/icons for each entry tool present in the liquidity zone.
+        /// </summary>
+        private void DrawEntryToolMarkers(LiquidityZone liq, int index)
+        {
+            double yPos = liq.Mid;
+            double spacing = (liq.High - liq.Low) / 6;  // Divide zone into 6 parts
+            int markerCount = 0;
+
+            if (liq.HasOTE)
+            {
+                string markerId = C("LIQMARKER", $"{liq.Start.Ticks}_OTE_{index}");
+                try
+                {
+                    _chart.DrawText(markerId, "●OTE", liq.Start, yPos + (spacing * markerCount), Color.Blue);
+                    Track("LIQMARKER", markerId, 50);
+                }
+                catch { }
+                markerCount++;
+            }
+
+            if (liq.HasOrderBlock)
+            {
+                string markerId = C("LIQMARKER", $"{liq.Start.Ticks}_OB_{index}");
+                try
+                {
+                    _chart.DrawText(markerId, "●OB", liq.Start, yPos + (spacing * markerCount), Color.Purple);
+                    Track("LIQMARKER", markerId, 50);
+                }
+                catch { }
+                markerCount++;
+            }
+
+            if (liq.HasFVG)
+            {
+                string markerId = C("LIQMARKER", $"{liq.Start.Ticks}_FVG_{index}");
+                try
+                {
+                    _chart.DrawText(markerId, "●FVG", liq.Start, yPos + (spacing * markerCount), Color.Orange);
+                    Track("LIQMARKER", markerId, 50);
+                }
+                catch { }
+                markerCount++;
+            }
+
+            if (liq.HasBreakerBlock)
+            {
+                string markerId = C("LIQMARKER", $"{liq.Start.Ticks}_BB_{index}");
+                try
+                {
+                    _chart.DrawText(markerId, "●BB", liq.Start, yPos + (spacing * markerCount), Color.Red);
+                    Track("LIQMARKER", markerId, 50);
+                }
+                catch { }
+            }
         }
     }
 }
