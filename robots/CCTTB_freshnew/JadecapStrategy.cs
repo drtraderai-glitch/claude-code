@@ -616,6 +616,7 @@ namespace CCTTB
         private LiquiditySweepDetector _sweepDetector;
         private OrderBlockDetector _obDetector;
         private OptimalTradeEntryDetector _oteDetector;
+        private LiquidityEntryMatcher _liquidityMatcher;
 
         // ═══════════════════════════════════════════════════════════════════
         // HTF BIAS/SWEEP ORCHESTRATION SYSTEM (NEW)
@@ -1510,6 +1511,7 @@ namespace CCTTB
             _sweepDetector = new LiquiditySweepDetector(_config);
             _obDetector = new OrderBlockDetector(_config);
             _oteDetector = new OptimalTradeEntryDetector(_config);
+            _liquidityMatcher = new LiquidityEntryMatcher(this.Symbol);
             _riskManager = new RiskManager(_config, this.Account);
             _tradeManager = new TradeManager(this, _config, _riskManager);
             _entryConfirmation = new EntryConfirmation(_config);
@@ -3045,6 +3047,19 @@ namespace CCTTB
                     }
                 }
 
+                // LIQUIDITY-BASED OTE FILTERING - Show only 1 OTE per strong liquidity cluster
+                if (oteZones != null && oteZones.Count > 0)
+                {
+                    var liquidityZones = _marketData.GetLiquidityZones();
+                    var originalCount = oteZones.Count;
+                    oteZones = _liquidityMatcher.FilterOTEByLiquidity(oteZones, liquidityZones);
+
+                    if (_config.EnableDebugLogging && originalCount != oteZones.Count)
+                    {
+                        Print($"[LIQUIDITY FILTER] OTE filtered: {originalCount} → {oteZones.Count} (showing only OTE near strong liquidity)");
+                    }
+                }
+
                 if (EnableDebugLoggingParam && Bars.Count % 10 == 0 && oteZones != null)
                 {
                     Print($"[DEBUG] OTE: {oteZones.Count} zones | Locked={(_state.ActiveOTE != null ? "YES" : "NO")}");
@@ -3073,6 +3088,19 @@ namespace CCTTB
                         {
                             bool exists = oteEntry.Any(z => Math.Abs(z.OTE618 - altOte.OTE618) < 0.0001);
                             if (!exists) oteEntry.Add(altOte);
+                        }
+                    }
+
+                    // LIQUIDITY-BASED OTE FILTERING for entry timeframe
+                    if (oteEntry != null && oteEntry.Count > 0)
+                    {
+                        var liquidityZones = _marketData.GetLiquidityZones();
+                        var originalCount = oteEntry.Count;
+                        oteEntry = _liquidityMatcher.FilterOTEByLiquidity(oteEntry, liquidityZones);
+
+                        if (_config.EnableDebugLogging && originalCount != oteEntry.Count)
+                        {
+                            Print($"[LIQUIDITY FILTER] Entry OTE filtered: {originalCount} → {oteEntry.Count} (showing only OTE near strong liquidity)");
                         }
                     }
                 }
