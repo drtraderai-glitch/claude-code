@@ -308,7 +308,7 @@ namespace CCTTB
         }
 
         // ---------- Summary line (top-center) ----------
-        public void DrawSummary(string text, VerticalAlignment v, HorizontalAlignment h, Color overrideColor = null)
+        public void DrawSummary(string text, VerticalAlignment v, HorizontalAlignment h, Color? overrideColor = null)
         {
             const string id = "INFO_SUMMARY";
             var c = overrideColor ?? Color.Gray;
@@ -573,9 +573,9 @@ namespace CCTTB
         }
 
         // ---------- FOI / FVG (optional helper) ----------
-        public void DrawFVG(DateTime t0, double low, double high, int boxMinutes = 30, Color overrideColor = default(Color))
+        public void DrawFVG(DateTime t0, double low, double high, int boxMinutes = 30, Color? overrideColor = null)
         {
-            var c = overrideColor == default(Color) ? (_config?.FVGColor ?? Color.Goldenrod) : overrideColor;
+            var c = overrideColor ?? (_config?.FVGColor ?? Color.Goldenrod);
             double lo = Math.Min(low, high);
             double hi = Math.Max(low, high);
 
@@ -857,9 +857,9 @@ namespace CCTTB
             }
         }
         
-        public void DrawOBBox(DateTime t0, double low, double high, int minutesSpan, string idPrefix, Color colorOverride = default(Color))
+        public void DrawOBBox(DateTime t0, double low, double high, int minutesSpan, string idPrefix, Color? colorOverride = null)
         {
-            var c = colorOverride == default(Color) ? Color.FromArgb(40, 0, 128, 255) : colorOverride;
+            var c = colorOverride ?? Color.FromArgb(40, 0, 128, 255);
             string id = C(idPrefix, $"{t0.Ticks}_{low:F5}_{high:F5}");
             _chart.DrawRectangle(id, t0, high, t0.AddMinutes(minutesSpan), low, c);
             Track(idPrefix, id, 30);
