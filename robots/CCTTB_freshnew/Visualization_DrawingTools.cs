@@ -856,6 +856,119 @@ namespace CCTTB
                 if (i >= CapOb) break;
             }
         }
+
+        /// <summary>
+        /// Draw Order Blocks FILTERED by liquidity proximity (same rules as OTE)
+        /// Shows ONLY OBs near strong liquidity (PDH/PDL/PWH/PWL/EQH/EQL)
+        /// ENHANCED: Shows liquidity match label on each OB
+        /// </summary>
+        public void DrawOrderBlocksFiltered(
+            List<OrderBlock> obBlocks,
+            LiquidityEntryMatcher matcher,
+            List<LiquidityZone> liquidityZones,
+            int boxMinutes = 30)
+        {
+            if (!_config.EnablePOIBoxDraw || obBlocks == null || obBlocks.Count == 0) return;
+            if (liquidityZones == null || liquidityZones.Count == 0) return;
+
+            // Step 1: Filter OBs by liquidity proximity
+            var filteredOBs = matcher.FilterOBByLiquidity(obBlocks, liquidityZones);
+
+            if (filteredOBs.Count == 0) return;
+
+            // Step 2: Get matches for labeling
+            var clusters = matcher.ClusterLiquidity(liquidityZones);
+            var matches = matcher.MatchOBToLiquidity(filteredOBs, clusters);
+
+            // Step 3: Draw filtered OBs with enhanced labels
+            int iBox = 0;
+            foreach (var ob in filteredOBs.OrderByDescending(b => b.Time))
+            {
+                var c = (ob.Direction == BiasDirection.Bullish) ? _config.BullishColor : _config.BearishColor;
+
+                string id = C("OB_LIQ", $"{ob.Time.Ticks}_{iBox}");
+
+                // IMPROVED: Draw semi-transparent filled box with border (matching OTE style)
+                Color fillColor = Color.FromArgb(30, c.R, c.G, c.B);  // 30% opacity
+                _chart.DrawRectangle(id, ob.Time, ob.HighPrice, ob.Time.AddMinutes(boxMinutes), ob.LowPrice, fillColor, 2, LineStyle.Solid);
+                Track("OB_LIQ", id, CapOb);
+
+                // Find matching liquidity label
+                var match = matches.FirstOrDefault(m => (m.EntryTool as OrderBlock) == ob);
+                string liqLabel = match?.MatchLabel ?? "OB";
+
+                // IMPROVED: Enhanced label with direction, liquidity match, and price range
+                if (ShowLabels)
+                {
+                    string directionIcon = ob.Direction == BiasDirection.Bullish ? "📈" : "📉";
+                    string qualityBadge = ob.HasLiquidityGrab ? " ⭐" : "";
+                    string zl = $"{directionIcon} {liqLabel}{qualityBadge}\n{ob.LowPrice:F5} - {ob.HighPrice:F5}";
+
+                    Color labelColor = Color.FromArgb(255, c.R, c.G, c.B);  // Full opacity for label
+                    _chart.DrawText(id + "_LBL", zl, ob.Time, ob.HighPrice + (_robot.Symbol.PipSize * 2), labelColor);
+                    Track("OB_LIQ", id + "_LBL", CapOb);
+                }
+
+                // IMPROVED: Draw midpoint line (like OTE sweet spot, but for OB)
+                double midPrice = (ob.LowPrice + ob.HighPrice) * 0.5;
+                Color midColor = Color.FromArgb(180, c.R, c.G, c.B);
+                _chart.DrawHorizontalLine(id + "_MID", midPrice, midColor, 1, LineStyle.Dots);
+                Track("OB_LIQ", id + "_MID", CapOb);
+
+                if (++iBox >= CapOb) break;
+            }
+        }
+
+        /// <summary>
+        /// SMART ENTRY TOOL VISUALIZATION: Draw OTE when available, fallback to OB when OTE is absent
+        /// This implements the "OB as fallback" logic following the same liquidity-based rules
+        /// </summary>
+        public void DrawEntryToolsWithLiquidity(
+            List<OTEZone> oteZones,
+            List<OrderBlock> obBlocks,
+            LiquidityEntryMatcher matcher,
+            List<LiquidityZone> liquidityZones,
+            int boxMinutes = 45,
+            bool drawEq50 = true,
+            BiasDirection? mssDirection = null,
+            bool enforceDailyEqSide = true)
+        {
+            if (!_config.EnablePOIBoxDraw) return;
+            if (liquidityZones == null || liquidityZones.Count == 0) return;
+
+            // Step 1: Try to filter and draw OTE zones
+            var filteredOTE = new List<OTEZone>();
+            if (oteZones != null && oteZones.Count > 0)
+            {
+                filteredOTE = matcher.FilterOTEByLiquidity(oteZones, liquidityZones);
+            }
+
+            // Step 2: If OTE zones are available and passed filtering, draw them
+            if (filteredOTE.Count > 0)
+            {
+                // Draw OTE with standard visualization
+                DrawOTE(filteredOTE, boxMinutes, drawEq50, mssDirection, enforceDailyEqSide);
+                return; // OTE takes priority - don't draw OB
+            }
+
+            // Step 3: FALLBACK - No valid OTE zones, draw filtered OB instead
+            if (obBlocks != null && obBlocks.Count > 0)
+            {
+                DrawOrderBlocksFiltered(obBlocks, matcher, liquidityZones, boxMinutes);
+
+                // Add info message indicating OB fallback mode
+                if (_config.ShowBoxLabels)
+                {
+                    const string fallbackId = "INFO_OB_FALLBACK";
+                    try { _chart.RemoveObject(fallbackId); } catch { }
+                    _chart.DrawStaticText(fallbackId,
+                        "Entry Tool: OB (OTE absent)",
+                        VerticalAlignment.Bottom,
+                        HorizontalAlignment.Left,
+                        Color.Gray);
+                }
+            }
+        }
         
         public void DrawOBBox(DateTime t0, double low, double high, int minutesSpan, string idPrefix, Color? colorOverride = null)
         {

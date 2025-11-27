@@ -342,5 +342,89 @@ namespace CCTTB
 
             return filteredOTE;
         }
+
+        /// <summary>
+        /// Match OB (Order Blocks) to liquidity clusters and return only the best match per cluster
+        /// SAME RULES AS OTE: Liquidity is the fuel, OB is only valid when NEAR strong liquidity
+        /// </summary>
+        public List<EntryToolMatch> MatchOBToLiquidity(
+            List<OrderBlock> obBlocks,
+            List<LiquidityCluster> clusters)
+        {
+            var matches = new List<EntryToolMatch>();
+
+            if (obBlocks == null || clusters == null || obBlocks.Count == 0 || clusters.Count == 0)
+                return matches;
+
+            // For each strong liquidity cluster
+            foreach (var cluster in clusters.Where(c => c.Strength == LiquidityStrength.Strong))
+            {
+                EntryToolMatch bestMatch = null;
+                double bestScore = 0;
+
+                // Find the best matching OB for this cluster
+                foreach (var ob in obBlocks)
+                {
+                    var proximity = CalculateProximity(ob.LowPrice, ob.HighPrice, cluster, ob.Direction);
+
+                    // Filter out tools that are too far
+                    if (proximity == ProximityType.Far)
+                        continue;
+
+                    double score = CalculateProximityScore(proximity, cluster.Strength);
+
+                    // Bonus score for OBs with liquidity grabs (higher quality)
+                    if (ob.HasLiquidityGrab)
+                        score *= 1.2;
+
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                        bestMatch = new EntryToolMatch
+                        {
+                            EntryTool = ob,
+                            ToolType = "OB",
+                            Cluster = cluster,
+                            Proximity = proximity,
+                            ProximityScore = score,
+                            MatchLabel = $"OB @ {cluster.StrongestZone.Label}"
+                        };
+                    }
+                }
+
+                // Add the best match for this cluster (if any)
+                if (bestMatch != null)
+                    matches.Add(bestMatch);
+            }
+
+            return matches;
+        }
+
+        /// <summary>
+        /// Filter OB (Order Blocks) to show only those that match strong liquidity
+        /// Returns ONLY the OB blocks that should be plotted
+        /// USE THIS AS FALLBACK when OTE is absent or filtered out
+        /// </summary>
+        public List<OrderBlock> FilterOBByLiquidity(
+            List<OrderBlock> obBlocks,
+            List<LiquidityZone> liquidityZones)
+        {
+            if (obBlocks == null || liquidityZones == null || obBlocks.Count == 0 || liquidityZones.Count == 0)
+                return new List<OrderBlock>();
+
+            // Step 1: Cluster liquidity zones
+            var clusters = ClusterLiquidity(liquidityZones);
+
+            // Step 2: Match OB to liquidity clusters
+            var matches = MatchOBToLiquidity(obBlocks, clusters);
+
+            // Step 3: Extract only the matched OB blocks
+            var filteredOB = matches
+                .Select(m => m.EntryTool as OrderBlock)
+                .Where(ob => ob != null)
+                .ToList();
+
+            return filteredOB;
+        }
     }
 }
